@@ -1,0 +1,91 @@
+global proc makeHomeNull (string $control) {
+    string $parentNode[] = `listRelatives -p`;
+    string $homeNull = `group -em -name ($control + "hmNUL")`;
+    
+    parent $homeNull $control;
+    
+    setAttr ($homeNull + ".translateX")  0;
+    setAttr ($homeNull + ".translateY")  0;
+    setAttr ($homeNull + ".translateZ")  0;
+    setAttr ($homeNull + ".rotateX")  0;
+    setAttr ($homeNull + ".rotateY")  0;
+    setAttr ($homeNull + ".rotateZ")  0;
+    setAttr ($homeNull + ".scaleX")  1;
+    setAttr ($homeNull + ".scaleY")  1;
+    setAttr ($homeNull + ".scaleZ")  1;
+    parent -w $homeNull;
+    parent $control $homeNull;
+    if(size($parentNode) != 0 ) parent $homeNull $parentNode[0];
+ }
+
+
+ global proc makeStretchyIK(string $startJNT, string $endJNT)
+ {
+    cycleCheck -e off;
+
+    string $ikHDLS[] = `ikHandle -sol "ikRPsolver" -sj $startJNT -ee $endJNT -n "stretchyIK_HDL"`;
+    string $ikHDL = $ikHDLS[0];
+    float $startPos[] = `xform -q -ws -t $startJNT`;
+    float $endPos[] = `xform -q -ws -t $endJNT`;
+    string $controls[] = `circle -nr 0 1 0 -n "stretchyIK_CON"`;
+  
+    string $control = $controls[0];
+    move $endPos[0] $endPos[1] $endPos[2] $control;
+    makeHomeNull($control);
+    parent stretchyIK_HDL stretchyIK_CON;
+    
+    spaceLocator -n "startPos_NUL";
+    move $startPos[0] $startPos[1] $startPos[2] startPos_NUL;
+    spaceLocator -n "endPos_NUL";
+    move $endPos[0] $endPos[1] $endPos[2] endPos_NUL;
+    
+    select -cl;
+    select -r $startJNT;
+    select -tgl startPos_NUL;
+    doCreatePointConstraintArgList 1 { "0","0","0","0","0","0","0","1","","1" };
+    pointConstraint -offset 0 0 0 -weight 1;
+    
+    select -cl;
+    select -r stretchyIK_HDL;
+    select -tgl endPos_NUL;
+    doCreatePointConstraintArgList 1 { "0","0","0","0","0","0","0","1","","1" };
+    pointConstraint -offset 0 0 0 -weight 1;
+    select -cl;
+    string $distanceBetweenNode = `shadingNode -asUtility distanceBetween`;
+    connectAttr -force startPos_NUL.worldMatrix[0] ($distanceBetweenNode +".inMatrix1");
+    connectAttr -force endPos_NUL.worldMatrix[0] ($distanceBetweenNode+".inMatrix2");  
+    
+    addAttr -ln "stretchyIK"  -at "enum" -en "off:on:"  |stretchyIK_CONhmNUL|stretchyIK_CON;
+    setAttr -e-keyable true |stretchyIK_CONhmNUL|stretchyIK_CON.stretchyIK;
+    
+   
+    string $addDoubleNode = `shadingNode -asUtility addDoubleLinear`;
+    
+    connectAttr -force elbow_JNT.translateX ($addDoubleNode + ".input1");
+    connectAttr -force ($endJNT+".translateX") ($addDoubleNode + ".input2");
+    
+    
+    string $divideNode = `shadingNode -asUtility multiplyDivide`;
+    setAttr ($divideNode + ".operation") 2;
+    connectAttr -f ($distanceBetweenNode +".distance") ($divideNode+".input1X");
+    connectAttr -f ($addDoubleNode +".output") ($divideNode+".input2X");
+    
+    string $multiplyNode = `shadingNode -asUtility multiplyDivide`;
+    
+    connectAttr -f stretchyIK_CON.stretchyIK ($multiplyNode+".input1X");
+    connectAttr -f ($divideNode+".outputX") ($multiplyNode+".input2X");
+    
+    
+    string $conditionNode = `shadingNode -asUtility condition`;
+    connectAttr -f ($multiplyNode+".outputX") ($conditionNode+".firstTerm");
+    connectAttr -f ($multiplyNode+".outputX") ($conditionNode+".colorIfFalseR");
+    setAttr ($conditionNode+".secondTerm") 1.000;
+    setAttr ($conditionNode+".colorIfTrueR") 1;
+    setAttr ($conditionNode+".operation") 5;
+    
+    connectAttr -f ($conditionNode+".outColorR") elbow_JNT.scaleX;
+    connectAttr -f ($conditionNode+".outColorR") ($startJNT+".scaleX");
+    
+ }
+ 
+ makeStretchyIK shoulder_JNT wrist_JNT;
