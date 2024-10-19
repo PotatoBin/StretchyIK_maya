@@ -1,0 +1,63 @@
+global proc string makeSprout ()
+{
+    string $stem[] = `polyCylinder -r 0.05 -h 1`;
+    move 0 0.5 0 $stem[0];
+    move 0 0 0 ($stem[0] + ".scalePivot") ($stem[0] + ".rotatePivot");
+    string $leaf1[] = `polySphere`;
+    string $leaf2[] = `polySphere`;
+    setAttr ($leaf1[0] + ".scaleX") 0.25;
+    setAttr ($leaf1[0] + ".scaleY") 0.05;
+    setAttr ($leaf1[0] + ".scaleZ") 0.5;
+    setAttr ($leaf2[0] + ".scaleX") 0.25;
+    setAttr ($leaf2[0] + ".scaleY") 0.05;
+    setAttr ($leaf2[0] + ".scaleZ") 0.5;
+    move 0 1 0.5 $leaf1[0];
+    move 0 1 -0.5 $leaf2[0];
+    move 0 1 0 ($leaf1[0] + ".scalePivot") ($leaf1[0] + ".rotatePivot");
+    move 0 1 0 ($leaf2[0] + ".scalePivot") ($leaf2[0] + ".rotatePivot");
+    select -r $stem[0] $leaf1[0] $leaf2[0];
+    string $group = `group`;
+    addAttr -ln "bloom"  -at double  -min 0 -max 5 -dv 0 $group;
+    setAttr -e-keyable true ($group + ".bloom");
+    connectAttr -f ($group + ".bloom") ($stem[0] + ".scaleY");
+    connectAttr -f ($stem[0] + ".scaleY") ($leaf1[0] + ".translateY");
+    connectAttr -f ($stem[0] + ".scaleY") ($leaf2[0] + ".translateY");
+    setDrivenKeyframe -cd ($stem[0] + ".scaleY") -dv 0 -v -90 -at "rotateX" $leaf1[0];
+    setDrivenKeyframe -cd ($stem[0] + ".scaleY") -dv 5 -v 0 -at "rotateX" $leaf1[0];
+    setDrivenKeyframe -cd ($stem[0] + ".scaleY") -dv 0 -v 90 -at "rotateX" $leaf2[0];
+    setDrivenKeyframe -cd ($stem[0] + ".scaleY") -dv 5 -v 0 -at "rotateX" $leaf2[0];
+    return $group;
+}
+
+global proc pinartAnimation(int $width, int $height, int $frame)
+{
+    string $sprouts[];
+
+    for($i = 0; $i < $width; $i++){
+        for($j = 0; $j < $height; $j++){
+            string $sprout = makeSprout();
+            move $i 0 (-1.0 * $j) $sprout;
+            float $randomRotateY = rand(0, 180);
+            rotate 0 $randomRotateY 0 $sprout;
+            $sprouts[size($sprouts)] = $sprout;
+        }
+    }
+    for ($f = 0; $f < $frame; $f++){
+        currentTime $f;
+        for ($i = 0; $i < $width; $i++){
+            for ($j = 0; $j < $height; $j++){
+                float $u = float($i) / $width;
+                float $v = float($j) / $height;
+                float $color[] = `colorAtPoint -o RGB -u $u -v $v file1`;
+                float $intensity = ($color[0] + $color[1] + $color[2]) / 3.0;
+    
+                float $newHeight = ($intensity * 5.0);
+                int $index = $i * $height + $j;
+                setAttr ($sprouts[$index] + ".bloom") $newHeight;
+                setKeyframe ($sprouts[$index] + ".bloom");
+            }
+        }
+    }
+}
+
+pinartAnimation(50,50,482);
